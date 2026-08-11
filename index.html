@@ -133,6 +133,15 @@
     transition: 0.15s;
   }
   .tool-btn:hover { background: rgba(245,166,35,0.18); color: #fff; }
+  .tool-btn.sync-on { border-color: rgba(102,255,153,0.6); color: var(--next); }
+  .sync-status {
+    width: 100%;
+    text-align: center;
+    font-size: 11px;
+    color: #d8d4e4;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    min-height: 14px;
+  }
 
   /* ===== グリッド ===== */
   .grid {
@@ -361,6 +370,8 @@
     <button class="tool-btn" onclick="exportData()">💾 バックアップを保存</button>
     <button class="tool-btn" onclick="document.getElementById('importFile').click()">📂 バックアップを読み込む</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
+    <button class="tool-btn" id="syncBtn" onclick="cloudToggle()">☁️ 読み込み中…</button>
+    <div class="sync-status" id="syncStatus"></div>
   </div>
 
   <div class="grid">
@@ -511,7 +522,10 @@ function load() {
     sortState.multi   = s.multi   || null;
   } catch (e) { /* 既定値のまま */ }
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  if (window.cloudPush) window.cloudPush();   // ログイン中ならクラウドにも反映
+}
 function saveSort() { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); }
 
 /* ========== 集計 ========== */
@@ -911,6 +925,159 @@ fillMonthSelects();
 load();
 render();
 checkAlert();
+</script>
+
+<!-- ========== クラウド同期（Firebase） ========== -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+         onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, doc, getDoc, setDoc,
+         onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDMnEL7amv8yeRMueUpsk0uUQkUM_lMaco",
+  authDomain: "subsuku-3e8df.firebaseapp.com",
+  projectId: "subsuku-3e8df",
+  storageBucket: "subsuku-3e8df.firebasestorage.app",
+  messagingSenderId: "891308723109",
+  appId: "1:891308723109:web:66beafb8302706be8e764c"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+// オフラインでも動くようローカルキャッシュを有効にする
+const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+const btn = document.getElementById('syncBtn');
+const statusEl = document.getElementById('syncStatus');
+
+let currentUid = null;
+let unsub = null;
+let applyingRemote = false;   // 受信反映中の push を抑止する
+let pushTimer = null;
+
+function setStatus(t) { statusEl.textContent = t || ''; }
+function stamp() {
+  const d = new Date();
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+
+function snapshotOf(o) {
+  return JSON.stringify({ monthly: o.monthly || [], yearly: o.yearly || [], multi: o.multi || [] });
+}
+function isEmpty(o) {
+  return ((o.monthly || []).length + (o.yearly || []).length + (o.multi || []).length) === 0;
+}
+
+/* 受信したデータをこの端末に反映する */
+function applyRemote(remote) {
+  applyingRemote = true;
+  data.monthly = Array.isArray(remote.monthly) ? remote.monthly : [];
+  data.yearly  = Array.isArray(remote.yearly)  ? remote.yearly  : [];
+  data.multi   = Array.isArray(remote.multi)   ? remote.multi   : [];
+  localStorage.setItem('subsuku', JSON.stringify(data));
+  load();       // months 移行などの正規化
+  render();
+  applyingRemote = false;
+}
+
+/* ローカルの変更をクラウドへ（連打をまとめる） */
+window.cloudPush = function () {
+  if (!currentUid || applyingRemote) return;
+  setStatus('同期中…');
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    try {
+      await setDoc(doc(db, 'users', currentUid), {
+        monthly: data.monthly, yearly: data.yearly, multi: data.multi,
+        updatedAt: Date.now()
+      });
+      setStatus('同期しました ' + stamp());
+    } catch (e) {
+      setStatus('同期できませんでした（オフライン時は復帰後に送信されます）');
+    }
+  }, 500);
+};
+
+window.cloudToggle = async function () {
+  if (currentUid) {
+    if (confirm('同期を解除してログアウトしますか？\nこの端末のデータは残ります。')) await signOut(auth);
+    return;
+  }
+  const provider = new GoogleAuthProvider();
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    // ポップアップがブロックされる端末（iOSなど）はリダイレクト方式にする
+    if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment' ||
+              e.code === 'auth/cancelled-popup-request')) {
+      await signInWithRedirect(auth, provider);
+    } else if (e && e.code === 'auth/popup-closed-by-user') {
+      setStatus('ログインを中止しました');
+    } else {
+      setStatus('ログインに失敗しました: ' + (e && e.code ? e.code : e));
+    }
+  }
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if (unsub) { unsub(); unsub = null; }
+
+  if (!user) {
+    currentUid = null;
+    btn.textContent = '☁️ ログインして同期';
+    btn.classList.remove('sync-on');
+    setStatus('この端末だけに保存中');
+    return;
+  }
+
+  currentUid = user.uid;
+  btn.textContent = '☁️ 同期オン';
+  btn.classList.add('sync-on');
+  btn.title = user.email || '';
+  setStatus('接続中…');
+
+  const ref = doc(db, 'users', user.uid);
+  try {
+    const snap = await getDoc(ref);
+    const localEmpty = isEmpty(data);
+
+    if (!snap.exists() || isEmpty(snap.data())) {
+      if (!localEmpty) window.cloudPush();          // クラウドが空 → この端末の内容を上げる
+      else setStatus('同期オン');
+    } else {
+      const remote = snap.data();
+      if (localEmpty) {
+        applyRemote(remote);                         // この端末が空 → 取り込む
+        setStatus('クラウドから読み込みました');
+      } else if (snapshotOf(remote) === snapshotOf(data)) {
+        setStatus('同期オン');                        // 同じ内容 → 何もしない
+      } else {
+        // 両方に別の内容がある → 勝手に消さず選んでもらう
+        const useRemote = confirm(
+          'クラウドとこの端末で内容が違います。\n\n' +
+          '「OK」… クラウドの内容をこの端末に取り込む\n' +
+          '「キャンセル」… この端末の内容でクラウドを上書きする\n\n' +
+          '※ 迷う場合は先に「バックアップを保存」してから選んでください。'
+        );
+        if (useRemote) { applyRemote(remote); setStatus('クラウドから読み込みました'); }
+        else window.cloudPush();
+      }
+    }
+  } catch (e) {
+    setStatus('クラウドに接続できませんでした（この端末には保存されています）');
+  }
+
+  // 以降は他端末の変更をリアルタイムで受け取る
+  unsub = onSnapshot(ref, (s) => {
+    if (!s.exists() || s.metadata.hasPendingWrites) return;   // 自分の書き込みは無視
+    const remote = s.data();
+    if (snapshotOf(remote) === snapshotOf(data)) return;
+    applyRemote(remote);
+    setStatus('他の端末の変更を反映しました ' + stamp());
+  }, () => setStatus('同期が切断されました'));
+});
 </script>
 </body>
 </html>
