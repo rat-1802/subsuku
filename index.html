@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>なおきのサブスク管理表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --monthly: #4fc3f7;
+    --yearly: #ce93d8;
+    --multi: #ffb74d;
+    --accent: #f5a623;
+    --next: #66ff99;
+    --text: #f0eef5;
+    --muted: #a5a1b5;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 20px 16px 60px;
+    min-height: 100vh;
+    background-color: var(--bg);
+    font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif;
+    color: var(--text);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* 背景は固定レイヤーで敷く（iOS Safari は background-attachment:fixed が効かないため） */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url("lake-bg.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* 公開版は写真を軽く／やわらかく（転用しづらく、読み込みも軽い） */
+    filter: blur(2px);
+    transform: scale(1.04);
+    z-index: -1;
+  }
+
+  .wrap { max-width: 1200px; margin: 0 auto; }
+
+  h1 {
+    text-align: center;
+    font-size: 34px;
+    font-weight: 900;
+    margin: 4px 0 18px;
+    letter-spacing: 0.05em;
+    color: #fff;
+    text-shadow:
+      0 2px 4px rgba(0,0,0,0.75),
+      0 0 14px rgba(0,0,0,0.5);
+  }
+
+  /* ===== アラートバナー ===== */
+  .alert {
+    max-width: 400px;
+    margin: 0 auto 18px;
+    border: 4px solid #e57373;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(59,26,26,0.94), rgba(38,20,20,0.94));
+    padding: 14px 16px;
+    position: relative;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .alert-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffcdd2;
+    line-height: 1.5;
+    padding-right: 22px;
+  }
+  .alert-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .alert-items span {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(229,115,115,0.22);
+    border: 1px solid rgba(229,115,115,0.5);
+    color: #ffe0e0;
+  }
+  .alert-close {
+    position: absolute; top: 8px; right: 10px;
+    background: none; border: none; color: #ffcdd2;
+    font-size: 15px; cursor: pointer; line-height: 1; padding: 2px 4px;
+  }
+
+  /* ===== サマリー（小カード2枚） ===== */
+  .summary {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .summary-box {
+    min-width: 170px;
+    text-align: center;
+    padding: 12px 22px 14px;
+    border-radius: 14px;
+    background: linear-gradient(160deg, rgba(26,26,46,0.9), rgba(22,33,62,0.9));
+    border: 1px solid rgba(245,166,35,0.45);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  }
+  .summary-box .label { font-size: 12px; color: #d8d4e4; margin-bottom: 4px; }
+  .summary-box .value { font-size: 27px; font-weight: 900; color: var(--accent); }
+
+  /* ===== バックアップ ===== */
+  .tools {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .tool-btn {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(245,166,35,0.55);
+    color: #ffd489;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .tool-btn:hover { background: rgba(245,166,35,0.18); color: #fff; }
+
+  /* ===== グリッド ===== */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  section {
+    background: rgba(26,26,46,0.62);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  }
+
+  /* ===== セクションヘッダーバー ===== */
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .monthly .sec-head { background: rgba(27,53,86,0.92); }
+  .yearly  .sec-head { background: rgba(61,36,80,0.92); }
+  .multi   .sec-head { background: rgba(74,52,24,0.92); }
+
+  .sec-icon { font-size: 15px; line-height: 1; }
+  .sec-title { font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .sec-count {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+  }
+  .monthly .sec-count { color: var(--monthly); }
+  .yearly  .sec-count { color: var(--yearly); }
+  .multi   .sec-count { color: var(--multi); }
+  .sec-total {
+    margin-left: auto;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+  }
+  .sec-total .unit { font-size: 11px; color: rgba(255,255,255,0.72); margin-left: 2px; }
+  .sec-arrow { font-size: 10px; color: rgba(255,255,255,0.6); }
+
+  .sec-body { padding: 12px; }
+  .sec-body.collapsed { display: none; }
+
+  /* ===== ソートボタン ===== */
+  .sorts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .sort-btn {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid #555;
+    color: var(--muted);
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .sort-btn:hover { border-color: #999; color: var(--text); }
+  .sort-btn.active {
+    background: rgba(245,166,35,0.18);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* ===== 追加フォーム ===== */
+  .form { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+  .row { display: flex; gap: 7px; }
+  .row > * { min-width: 0; }
+  .row input, .row select { flex: 1; }
+
+  input, select {
+    font-family: inherit;
+    font-size: 13px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(10,10,20,0.72);
+    color: var(--text);
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input::placeholder { color: #7a768c; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+  .add-btn {
+    flex: 0 0 auto;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #1a1a2e;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .add-btn:hover { filter: brightness(1.1); }
+
+  /* ===== タグ ===== */
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .yearly .tag { background: rgba(206,147,216,0.2); border-color: rgba(206,147,216,0.5); color: #eecdf5; }
+  .multi  .tag { background: rgba(255,183,77,0.2);  border-color: rgba(255,183,77,0.5);  color: #ffe0b2; }
+  .tag button { background: none; border: none; color: inherit; cursor: pointer; font-size: 11px; padding: 0; line-height: 1; }
+
+  .badge-times {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(245,166,35,0.18);
+    border: 1px solid rgba(245,166,35,0.5);
+    color: #ffd489;
+  }
+  .badge-next {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(102,255,153,0.15);
+    border: 1px solid rgba(102,255,153,0.5);
+    color: var(--next);
+  }
+
+  /* ===== アイテム ===== */
+  .items { display: flex; flex-direction: column; gap: 8px; }
+  .item { background: rgba(15,15,26,0.55); border-radius: 12px; padding: 10px 12px; }
+  .item-main { display: flex; align-items: flex-start; gap: 8px; }
+  .item-text { flex: 1; min-width: 0; }
+  .item-name { font-size: 13px; font-weight: 700; word-break: break-word; }
+  .item-cost { font-size: 18px; font-weight: 900; color: var(--accent); margin-top: 2px; }
+  .item-cost .unit { font-size: 11px; font-weight: 700; color: #c9a15c; margin-left: 1px; }
+  .item-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .item-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+  .item-memo { font-size: 11px; color: #b7b2c6; margin-top: 4px; word-break: break-word; }
+  .item-actions { display: flex; align-items: center; gap: 2px; padding-top: 2px; }
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 3px 4px; line-height: 1; }
+  .icon-edit { color: var(--accent); }
+  .icon-del { color: var(--muted); }
+  .icon-btn:hover { filter: brightness(1.3); }
+
+  .empty { font-size: 12px; color: var(--muted); text-align: center; padding: 10px 0; }
+
+  /* ===== 編集フォーム ===== */
+  .edit-form {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .edit-actions { display: flex; gap: 7px; }
+  .edit-actions button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 7px;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .btn-save { background: var(--accent); color: #1a1a2e; }
+  .btn-cancel { background: rgba(255,255,255,0.14); color: var(--text); }
+
+  @media (max-width: 768px) {
+    body { padding: 14px 12px 40px; }
+    .grid { grid-template-columns: 1fr; }
+    h1 { font-size: 24px; margin-bottom: 14px; }
+
+    /* iOS で入力時に画面が拡大されないよう 16px 以上にする */
+    input, select { font-size: 16px; padding: 10px 12px; }
+    .add-btn { font-size: 14px; padding: 10px 18px; }
+
+    /* 指で押せる大きさを確保する */
+    .icon-btn { font-size: 17px; padding: 8px 10px; }
+    .sort-btn { font-size: 12px; padding: 7px 14px; }
+    .tool-btn { font-size: 13px; padding: 9px 16px; }
+    .tag, .badge-times, .badge-next { font-size: 12px; padding: 4px 10px; }
+    .tag button { font-size: 13px; padding: 2px 2px; }
+    .sec-head { padding: 13px 14px; }
+    .summary-box { flex: 1 1 42%; min-width: 0; padding: 10px 12px 12px; }
+    .summary-box .value { font-size: 23px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⛩️ なおきのサブスク管理表</h1>
+
+  <div id="alertArea"></div>
+
+  <div class="summary">
+    <div class="summary-box">
+      <div class="label">月額合計</div>
+      <div class="value" id="sumMonthly">¥0</div>
+    </div>
+    <div class="summary-box">
+      <div class="label">年額合計</div>
+      <div class="value" id="sumYearly">¥0</div>
+    </div>
+  </div>
+
+  <div class="tools">
+    <button class="tool-btn" onclick="exportData()">💾 バックアップを保存</button>
+    <button class="tool-btn" onclick="document.getElementById('importFile').click()">📂 バックアップを読み込む</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
+  </div>
+
+  <div class="grid">
+    <!-- ===== 月払い ===== -->
+    <section class="monthly" data-type="monthly">
+      <div class="sec-head" onclick="toggleSection('monthly')">
+        <span class="sec-icon">📅</span>
+        <span class="sec-title">月払い</span>
+        <span class="sec-count" id="count-monthly">0件</span>
+        <span class="sec-arrow" id="arrow-monthly">▼</span>
+        <span class="sec-total" id="total-monthly">¥0<span class="unit">/ 月</span></span>
+      </div>
+      <div class="sec-body" id="body-monthly">
+        <div class="sorts">
+          <button class="sort-btn" data-sort="high" onclick="setSort('monthly','high')">金額が高い順</button>
+          <button class="sort-btn" data-sort="low" onclick="setSort('monthly','low')">金額が低い順</button>
+        </div>
+        <div class="form">
+          <input type="text" id="m-name" placeholder="サブスク名" onkeydown="if(event.key==='Enter')addMonthly()">
+          <div class="row">
+            <input type="number" id="m-cost" placeholder="金額（円）" onkeydown="if(event.key==='Enter')addMonthly()">
+            <button class="add-btn" onclick="addMonthly()">＋追加</button>
+          </div>
+          <input type="text" id="m-memo" placeholder="メモ（任意）" onkeydown="if(event.key==='Enter')addMonthly()">
+        </div>
+        <div class="items" id="list-monthly"></div>
+      </div>
+    </section>
+
+    <!-- ===== 年払い ===== -->
+    <section class="yearly" data-type="yearly">
+      <div class="sec-head" onclick="toggleSection('yearly')">
+        <span class="sec-icon">🗓</span>
+        <span class="sec-title">年払い</span>
+        <span class="sec-count" id="count-yearly">0件</span>
+        <span class="sec-arrow" id="arrow-yearly">▼</span>
+        <span class="sec-total" id="total-yearly">¥0<span class="unit">/ 年</span></span>
+      </div>
+      <div class="sec-body" id="body-yearly">
+        <div class="sorts">
+          <button class="sort-btn" data-sort="high" onclick="setSort('yearly','high')">金額が高い順</button>
+          <button class="sort-btn" data-sort="low" onclick="setSort('yearly','low')">金額が低い順</button>
+          <button class="sort-btn" data-sort="month" onclick="setSort('yearly','month')">更新月順</button>
+        </div>
+        <div class="form">
+          <input type="text" id="y-name" placeholder="サブスク名" onkeydown="if(event.key==='Enter')addYearly()">
+          <div class="row">
+            <input type="number" id="y-cost" placeholder="年額（円）" onkeydown="if(event.key==='Enter')addYearly()">
+            <select id="y-month" onchange="addMonthTag('yearly')"><option value="">更新月</option></select>
+            <button class="add-btn" onclick="addYearly()">登録</button>
+          </div>
+          <div class="tags" id="y-tags"></div>
+          <input type="text" id="y-memo" placeholder="メモ（任意）" onkeydown="if(event.key==='Enter')addYearly()">
+        </div>
+        <div class="items" id="list-yearly"></div>
+      </div>
+    </section>
+
+    <!-- ===== 数年おき ===== -->
+    <section class="multi" data-type="multi">
+      <div class="sec-head" onclick="toggleSection('multi')">
+        <span class="sec-icon">🔁</span>
+        <span class="sec-title">数年おき</span>
+        <span class="sec-count" id="count-multi">0件</span>
+        <span class="sec-arrow" id="arrow-multi">▼</span>
+        <span class="sec-total" id="total-multi">¥0<span class="unit">/ 年換算</span></span>
+      </div>
+      <div class="sec-body" id="body-multi">
+        <div class="sorts">
+          <button class="sort-btn" data-sort="high" onclick="setSort('multi','high')">金額が高い順</button>
+          <button class="sort-btn" data-sort="low" onclick="setSort('multi','low')">金額が低い順</button>
+          <button class="sort-btn" data-sort="month" onclick="setSort('multi','month')">更新月順</button>
+        </div>
+        <div class="form">
+          <input type="text" id="x-name" placeholder="サブスク名" onkeydown="if(event.key==='Enter')addMulti()">
+          <div class="row">
+            <input type="number" id="x-cost" placeholder="費用（円）" onkeydown="if(event.key==='Enter')addMulti()">
+            <input type="number" id="x-cycle" placeholder="年数" onkeydown="if(event.key==='Enter')addMulti()">
+            <button class="add-btn" onclick="addMulti()">登録</button>
+          </div>
+          <div class="row">
+            <input type="number" id="x-last" placeholder="最終更新" onkeydown="if(event.key==='Enter')addMulti()">
+            <select id="x-month" onchange="addMonthTag('multi')"><option value="">更新月</option></select>
+          </div>
+          <div class="tags" id="x-tags"></div>
+          <input type="text" id="x-memo" placeholder="メモ（任意）" onkeydown="if(event.key==='Enter')addMulti()">
+        </div>
+        <div class="items" id="list-multi"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ========== 定数 ========== */
+const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const STORE_KEY = 'subsuku';
+const SORT_KEY = 'subsuku-sort';
+const ALERT_KEY = 'subsuku-alert-dismissed';
+
+/* ========== 状態 ========== */
+let data = { monthly: [], yearly: [], multi: [] };
+let sortState = { monthly: null, yearly: null, multi: null };
+let editingId = null;                          // 同時に開ける編集フォームは1つだけ
+let draftMonths = { yearly: [], multi: [] };   // 追加フォームの更新月タグ
+let editMonths = [];                           // 編集フォームの更新月タグ
+
+/* ========== ユーティリティ ========== */
+function escHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function yen(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
+function monthNum(label) { const i = MONTHS.indexOf(label); return i < 0 ? 99 : i + 1; }
+function firstMonth(item) {
+  if (!item.months || !item.months.length) return 99;
+  return Math.min.apply(null, item.months.map(monthNum));
+}
+function sortMonths(arr) { return arr.slice().sort((a, b) => monthNum(a) - monthNum(b)); }
+
+/* ========== 保存・読み込み ========== */
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    data.monthly = Array.isArray(raw.monthly) ? raw.monthly : [];
+    data.yearly  = Array.isArray(raw.yearly)  ? raw.yearly  : [];
+    data.multi   = Array.isArray(raw.multi)   ? raw.multi   : [];
+  } catch (e) {
+    data = { monthly: [], yearly: [], multi: [] };
+  }
+  // 旧データ互換: months が無ければ month から移行
+  ['yearly', 'multi'].forEach(type => {
+    data[type].forEach(it => {
+      if (!Array.isArray(it.months)) {
+        it.months = it.month ? [it.month] : [];
+        delete it.month;
+      }
+    });
+  });
+  try {
+    const s = JSON.parse(localStorage.getItem(SORT_KEY) || '{}');
+    sortState.monthly = s.monthly || null;
+    sortState.yearly  = s.yearly  || null;
+    sortState.multi   = s.multi   || null;
+  } catch (e) { /* 既定値のまま */ }
+}
+function save() { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+function saveSort() { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); }
+
+/* ========== 集計 ========== */
+function monthCount(it) { return (it.months && it.months.length) ? it.months.length : 1; }
+function yearlyCost(it) { return (Number(it.cost) || 0) * monthCount(it); }
+function multiAnnual(it) {
+  const cycle = Number(it.cycle) > 0 ? Number(it.cycle) : 1;
+  return (Number(it.cost) || 0) / cycle;
+}
+function totalMonthly() { return data.monthly.reduce((s, it) => s + (Number(it.cost) || 0), 0); }
+function totalYearly()  { return data.yearly.reduce((s, it) => s + yearlyCost(it), 0); }
+function totalMulti()   { return data.multi.reduce((s, it) => s + multiAnnual(it), 0); }
+
+/* ========== ソート ========== */
+function setSort(type, key) {
+  sortState[type] = (sortState[type] === key) ? null : key;   // 同じボタンで解除
+  saveSort();
+  render();
+}
+function sorted(type) {
+  const list = data[type].slice();
+  const key = sortState[type];
+  if (!key) return list;
+  const cost = it => type === 'yearly' ? yearlyCost(it)
+             : type === 'multi'  ? multiAnnual(it)
+             : (Number(it.cost) || 0);
+  if (key === 'high') list.sort((a, b) => cost(b) - cost(a));
+  else if (key === 'low') list.sort((a, b) => cost(a) - cost(b));
+  else if (key === 'month') list.sort((a, b) => firstMonth(a) - firstMonth(b));
+  return list;
+}
+
+/* ========== セクション開閉 ========== */
+function toggleSection(type) {
+  const body = document.getElementById('body-' + type);
+  body.classList.toggle('collapsed');
+  document.getElementById('arrow-' + type).textContent =
+    body.classList.contains('collapsed') ? '▶' : '▼';
+}
+
+/* ========== 更新月タグ（追加フォーム） ========== */
+function fillMonthSelects() {
+  ['y-month', 'x-month'].forEach(id => {
+    const sel = document.getElementById(id);
+    MONTHS.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      sel.appendChild(o);
+    });
+  });
+}
+function addMonthTag(type) {
+  const sel = document.getElementById(type === 'yearly' ? 'y-month' : 'x-month');
+  const v = sel.value;
+  sel.value = '';
+  if (!v) return;
+  if (draftMonths[type].indexOf(v) === -1) {
+    draftMonths[type].push(v);
+    draftMonths[type] = sortMonths(draftMonths[type]);
+  }
+  renderDraftTags(type);
+}
+function removeMonthTag(type, m) {
+  draftMonths[type] = draftMonths[type].filter(x => x !== m);
+  renderDraftTags(type);
+}
+function renderDraftTags(type) {
+  const el = document.getElementById(type === 'yearly' ? 'y-tags' : 'x-tags');
+  el.innerHTML = draftMonths[type].map(m =>
+    '<span class="tag">' + escHtml(m) +
+    '<button onclick="removeMonthTag(\'' + type + '\',\'' + escHtml(m) + '\')">✕</button></span>'
+  ).join('');
+}
+
+/* ========== 更新月タグ（編集フォーム） ========== */
+function addEditMonth(sel) {
+  const v = sel.value;
+  sel.value = '';
+  if (!v) return;
+  if (editMonths.indexOf(v) === -1) {
+    editMonths.push(v);
+    editMonths = sortMonths(editMonths);
+  }
+  renderEditTags();
+}
+function removeEditMonth(m) {
+  editMonths = editMonths.filter(x => x !== m);
+  renderEditTags();
+}
+function renderEditTags() {
+  const el = document.getElementById('edit-tags');
+  if (!el) return;
+  el.innerHTML = editMonths.map(m =>
+    '<span class="tag">' + escHtml(m) +
+    '<button onclick="removeEditMonth(\'' + escHtml(m) + '\')">✕</button></span>'
+  ).join('');
+}
+
+/* ========== 追加 ========== */
+function addMonthly() {
+  const name = document.getElementById('m-name').value.trim();
+  const cost = Number(document.getElementById('m-cost').value);
+  if (!name || !cost) return;
+  data.monthly.push({ id: Date.now(), name: name, cost: cost, memo: document.getElementById('m-memo').value.trim() });
+  ['m-name', 'm-cost', 'm-memo'].forEach(id => document.getElementById(id).value = '');
+  save(); render();
+}
+function addYearly() {
+  const name = document.getElementById('y-name').value.trim();
+  const cost = Number(document.getElementById('y-cost').value);
+  if (!name || !cost) return;
+  data.yearly.push({
+    id: Date.now(), name: name, cost: cost,
+    memo: document.getElementById('y-memo').value.trim(),
+    months: draftMonths.yearly.slice()
+  });
+  ['y-name', 'y-cost', 'y-memo'].forEach(id => document.getElementById(id).value = '');
+  draftMonths.yearly = [];
+  renderDraftTags('yearly');
+  save(); render();
+}
+function addMulti() {
+  const name = document.getElementById('x-name').value.trim();
+  const cost = Number(document.getElementById('x-cost').value);
+  if (!name || !cost) return;
+  const cycle = Number(document.getElementById('x-cycle').value) || 1;
+  const lastRaw = document.getElementById('x-last').value.trim();
+  data.multi.push({
+    id: Date.now(), name: name, cost: cost,
+    memo: document.getElementById('x-memo').value.trim(),
+    months: draftMonths.multi.slice(),
+    cycle: cycle,
+    lastYear: lastRaw ? Number(lastRaw) : null
+  });
+  ['x-name', 'x-cost', 'x-cycle', 'x-last', 'x-memo'].forEach(id => document.getElementById(id).value = '');
+  draftMonths.multi = [];
+  renderDraftTags('multi');
+  save(); render();
+}
+
+/* ========== 削除 ========== */
+function removeItem(type, id) {
+  const it = data[type].find(x => x.id === id);
+  if (!it) return;
+  if (!confirm('「' + it.name + '」を削除しますか？')) return;
+  data[type] = data[type].filter(x => x.id !== id);
+  if (editingId === id) editingId = null;
+  save(); render();
+}
+
+/* ========== 編集 ========== */
+function startEdit(type, id) {
+  editingId = (editingId === id) ? null : id;    // 同時に開けるのは1つだけ
+  const it = data[type].find(x => x.id === id);
+  editMonths = (editingId && it && it.months) ? it.months.slice() : [];
+  render();
+}
+function cancelEdit() {
+  editingId = null;
+  editMonths = [];
+  render();
+}
+function saveEdit(type, id) {
+  const it = data[type].find(x => x.id === id);
+  if (!it) return;
+  const name = document.getElementById('edit-name').value.trim();
+  const cost = Number(document.getElementById('edit-cost').value);
+  if (!name || !cost) return;
+  it.name = name;
+  it.cost = cost;
+  it.memo = document.getElementById('edit-memo').value.trim();
+  if (type !== 'monthly') it.months = editMonths.slice();
+  if (type === 'multi') {
+    it.cycle = Number(document.getElementById('edit-cycle').value) || 1;
+    const lastRaw = document.getElementById('edit-last').value.trim();
+    it.lastYear = lastRaw ? Number(lastRaw) : null;
+  }
+  editingId = null;
+  editMonths = [];
+  save(); render();
+}
+
+function editFormHtml(type, it) {
+  let html = '<div class="edit-form">';
+  html += '<input type="text" id="edit-name" value="' + escHtml(it.name) + '" placeholder="サブスク名">';
+  if (type === 'multi') {
+    html += '<div class="row">' +
+            '<input type="number" id="edit-cost" value="' + escHtml(it.cost) + '" placeholder="費用（円）">' +
+            '<input type="number" id="edit-cycle" value="' + escHtml(it.cycle || 1) + '" placeholder="年数">' +
+            '</div>';
+    html += '<div class="row">' +
+            '<input type="number" id="edit-last" value="' + escHtml(it.lastYear == null ? '' : it.lastYear) + '" placeholder="最終更新">' +
+            '<select onchange="addEditMonth(this)"><option value="">更新月</option>' +
+            MONTHS.map(m => '<option value="' + m + '">' + m + '</option>').join('') + '</select>' +
+            '</div>';
+    html += '<div class="tags" id="edit-tags"></div>';
+  } else if (type === 'yearly') {
+    html += '<div class="row">' +
+            '<input type="number" id="edit-cost" value="' + escHtml(it.cost) + '" placeholder="年額（円）">' +
+            '<select onchange="addEditMonth(this)"><option value="">更新月</option>' +
+            MONTHS.map(m => '<option value="' + m + '">' + m + '</option>').join('') + '</select>' +
+            '</div>';
+    html += '<div class="tags" id="edit-tags"></div>';
+  } else {
+    html += '<input type="number" id="edit-cost" value="' + escHtml(it.cost) + '" placeholder="金額（円）">';
+  }
+  html += '<input type="text" id="edit-memo" value="' + escHtml(it.memo || '') + '" placeholder="メモ（任意）">';
+  html += '<div class="edit-actions">' +
+          '<button class="btn-save" onclick="saveEdit(\'' + type + '\',' + it.id + ')">保存</button>' +
+          '<button class="btn-cancel" onclick="cancelEdit()">キャンセル</button>' +
+          '</div>';
+  html += '</div>';
+  return html;
+}
+
+/* ========== 描画 ========== */
+function itemHtml(type, it) {
+  const times = monthCount(it);
+
+  // 金額と単位（年払い・数年おきで複数回なら「/回」）
+  let unit;
+  if (type === 'monthly') unit = '/月';
+  else if (type === 'yearly') unit = times > 1 ? '/回' : '/年';
+  else unit = '/回';
+
+  let html = '<div class="item"><div class="item-main"><div class="item-text">';
+  html += '<div class="item-name">' + escHtml(it.name) + '</div>';
+  html += '<div class="item-cost">' + yen(it.cost) + '<span class="unit">' + unit + '</span></div>';
+
+  // バッジ列
+  const badges = [];
+  if (type === 'yearly' && times > 1) badges.push('<span class="badge-times">年' + times + '回</span>');
+  if (type === 'multi') {
+    const cycle = Number(it.cycle) > 0 ? Number(it.cycle) : 1;
+    badges.push('<span class="badge-times">' + cycle + '年に1回</span>');
+    if (it.lastYear) badges.push('<span class="badge-next">次回 ' + (Number(it.lastYear) + cycle) + '年</span>');
+  }
+  if (it.months && it.months.length) {
+    sortMonths(it.months).forEach(m => badges.push('<span class="tag">' + escHtml(m) + '</span>'));
+  }
+  if (badges.length) html += '<div class="item-badges">' + badges.join('') + '</div>';
+
+  // 派生コスト
+  if (type === 'yearly') {
+    const y = yearlyCost(it);
+    html += '<div class="item-sub">年計 ' + yen(y) + ' ／ 月換算 ' + yen(y / 12) + '</div>';
+  } else if (type === 'multi') {
+    const a = multiAnnual(it);
+    html += '<div class="item-sub">年換算 ' + yen(a) + ' ／ 月換算 ' + yen(a / 12) + '</div>';
+  }
+
+  if (it.memo) html += '<div class="item-memo">📝 ' + escHtml(it.memo) + '</div>';
+
+  html += '</div><div class="item-actions">' +
+          '<button class="icon-btn icon-edit" onclick="startEdit(\'' + type + '\',' + it.id + ')" title="編集">✏️</button>' +
+          '<button class="icon-btn icon-del" onclick="removeItem(\'' + type + '\',' + it.id + ')" title="削除">✕</button>' +
+          '</div></div>';
+
+  if (editingId === it.id) html += editFormHtml(type, it);
+  html += '</div>';
+  return html;
+}
+
+function renderSection(type, totalValue, unitLabel) {
+  const list = sorted(type);
+  document.getElementById('list-' + type).innerHTML = list.length
+    ? list.map(it => itemHtml(type, it)).join('')
+    : '<div class="empty">まだ登録がありません</div>';
+
+  document.getElementById('count-' + type).textContent = data[type].length + '件';
+  document.getElementById('total-' + type).innerHTML =
+    yen(totalValue) + '<span class="unit">/ ' + unitLabel + '</span>';
+
+  document.querySelectorAll('section[data-type="' + type + '"] .sort-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === sortState[type]);
+  });
+}
+
+function render() {
+  const tm = totalMonthly(), ty = totalYearly(), tx = totalMulti();
+
+  renderSection('monthly', tm, '月');
+  renderSection('yearly', ty, '年');
+  renderSection('multi', tx, '年換算');
+
+  document.getElementById('sumMonthly').textContent = yen(tm + ty / 12 + tx / 12);
+  document.getElementById('sumYearly').textContent = yen(tm * 12 + ty + tx);
+
+  renderEditTags();
+}
+
+/* ========== バックアップ（書き出し・読み込み） ========== */
+function exportData() {
+  const now = new Date();
+  const stamp = now.getFullYear() + '-' +
+                ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+                ('0' + now.getDate()).slice(-2);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'subsuku-backup-' + stamp + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importData(input) {
+  const file = input.files && input.files[0];
+  input.value = '';                      // 同じファイルを続けて選べるようにクリア
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    let obj;
+    try {
+      obj = JSON.parse(reader.result);
+    } catch (e) {
+      alert('読み込めませんでした。JSONファイルが壊れているようです。');
+      return;
+    }
+    if (!obj || typeof obj !== 'object' ||
+        (!Array.isArray(obj.monthly) && !Array.isArray(obj.yearly) && !Array.isArray(obj.multi))) {
+      alert('このアプリのバックアップファイルではないようです。');
+      return;
+    }
+
+    const counts = ['monthly', 'yearly', 'multi']
+      .map(k => (Array.isArray(obj[k]) ? obj[k].length : 0));
+    const msg = '月払い' + counts[0] + '件 / 年払い' + counts[1] + '件 / 数年おき' + counts[2] + '件 を読み込みます。\n' +
+                '現在のデータ（月払い' + data.monthly.length + '件 / 年払い' + data.yearly.length +
+                '件 / 数年おき' + data.multi.length + '件）は上書きされます。よろしいですか？';
+    if (!confirm(msg)) return;
+
+    data.monthly = Array.isArray(obj.monthly) ? obj.monthly : [];
+    data.yearly  = Array.isArray(obj.yearly)  ? obj.yearly  : [];
+    data.multi   = Array.isArray(obj.multi)   ? obj.multi   : [];
+    // id が欠けている項目に採番（編集・削除の識別に必要）
+    let seq = Date.now();
+    ['monthly', 'yearly', 'multi'].forEach(type => {
+      data[type].forEach(it => { if (!it.id) it.id = seq++; });
+    });
+
+    editingId = null;
+    editMonths = [];
+    save();
+    load();          // months 移行などの正規化をかけ直す
+    save();          // 正規化後の形で保存し直す
+    render();
+  };
+  reader.onerror = () => alert('ファイルを読み込めませんでした。');
+  reader.readAsText(file);
+}
+
+/* ========== アラートバナー ========== */
+function checkAlert() {
+  const now = new Date();
+  // 月またぎ対応: getMonth() は 0〜11 なので +2 が「来月」。12月は 13 になるため 1月へ丸める
+  const nextMonth = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
+  const nextLabel = nextMonth + '月';
+  // 来月が属する年（12月に見る来月は翌年1月）
+  const nextYear = (now.getMonth() + 2 > 12) ? now.getFullYear() + 1 : now.getFullYear();
+
+  const stamp = now.getFullYear() + '-' + (now.getMonth() + 1);
+  if (localStorage.getItem(ALERT_KEY) === stamp) return;
+
+  const names = [];
+  data.yearly.forEach(it => {
+    if (it.months && it.months.indexOf(nextLabel) !== -1) names.push(it.name);
+  });
+  data.multi.forEach(it => {
+    if (!it.months || it.months.indexOf(nextLabel) === -1) return;
+    if (it.lastYear) {
+      const cycle = Number(it.cycle) > 0 ? Number(it.cycle) : 1;
+      if (Number(it.lastYear) + cycle !== nextYear) return;
+    }
+    names.push(it.name);
+  });
+  if (!names.length) return;
+
+  document.getElementById('alertArea').innerHTML =
+    '<div class="alert">' +
+      '<button class="alert-close" onclick="dismissAlert()">✕</button>' +
+      '<div class="alert-title">⚠️ 来月更新のサブスクがあります！見直しを検討しませんか？</div>' +
+      '<div class="alert-items">' + names.map(n => '<span>' + escHtml(n) + '</span>').join('') + '</div>' +
+    '</div>';
+}
+function dismissAlert() {
+  const now = new Date();
+  localStorage.setItem(ALERT_KEY, now.getFullYear() + '-' + (now.getMonth() + 1));
+  document.getElementById('alertArea').innerHTML = '';
+}
+
+/* ========== 起動 ========== */
+fillMonthSelects();
+load();
+render();
+checkAlert();
+</script>
+</body>
+</html>
